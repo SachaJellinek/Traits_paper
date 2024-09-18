@@ -18,6 +18,11 @@ library(tidyverse)
 library(lme4)
 library(dplyr)
 library(tidyr)
+library(corrr)
+library(ggbiplot)
+library("FactoMineR")
+library(ggfortify)
+library(cluster)
 
 
 dat <- read.csv("q00200.csv", header = T)
@@ -27,16 +32,32 @@ env<- read.csv("q00300.csv", header = T)
 
 names(dat) <- c("quad","spp","cov")
 head(dat)
-#dat$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
-#dat$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
-#dat <- filter(dat, ecosystem != '9')
-datmat <- dcast(dat, quad ~ spp, mean, value = "cov", fill = 0)
-datmat2 <- pivot_longer(data = dat,
-             cols = !quad,
-             names_to = "species",
-             values_to = "cover")
+dat$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
+dat$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
+dat$WptID <- env$'iWptID'[match(dat$'quad', env$'iQuadratID')]
+dat <- filter(dat, ecosystem != '9')
+plants <- dat %>%
+  group_by(WptID, ecosystem, treat, spp) %>% 
+  summarise(cover=sum(cov))
+plants$WptID <- as.factor(plants$WptID)
+plants$treat <- as.factor(plants$treat)
+plants$ecosystem <- as.factor(plants$ecosystem)
+plants$cover <- as.numeric(plants$cover)
+str(plants)
+datmat <- dcast(dat, WptID+quad+treat+ecosystem ~ spp, mean, value = "cov", fill = 0)
+str(datmat)
 
-prcomp(datmat)
+pca_res <- prcomp(datmat, scale. = TRUE)
+autoplot(pca_res)
+autoplot(pca_res, data = datmat, colour = 'treat', frame = TRUE)
+
+data.pca <- princomp(datmat[,-1], cor=TRUE)
+summary(data.pca)
+round(data.pca$sdev^2,2)
+screeplot(data.pca)
+scale(datmat[,-1], center = data.pca$center, scale = data.pca$scale) %*% data.pca$loadings
+plot(data.pca$scores[,1],data.pca$scores[,2])
+text(data.pca$scores[,1],data.pca$scores[,2],datmat[,3])
 
 rownames(datmat) <- datmat[,1]
 datmat <- datmat[,-1]
