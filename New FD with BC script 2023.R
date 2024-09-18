@@ -1,4 +1,5 @@
-setwd("C:/VP2015")
+#setwd("C:/VP2015")
+setwd("~/uomShare/wergProj/W12 - Revegetation/CLLMM work/Traits paper/Code and data")
 
 library(extrafont)    # fonts for plotting (if using for first time need to load scripts - see help...)
 library(reshape2)     # longfile to flatfile and vice versa
@@ -14,17 +15,29 @@ library(ggplot2)
 library(plyr)
 library(tidyverse)
 #library(ecodist)
-library(glmm)
+library(lme4)
+library(dplyr)
+library(tidyr)
 
 
-dat <- read.csv("rel/q00200.csv", header = T)
-dat2<- read.csv("rel/q00120.csv", header = T)
-env<- read.csv("rel/q00300.csv", header = T)
+dat <- read.csv("q00200.csv", header = T)
+dat2<- read.csv("q00120.csv", header = T)
+env<- read.csv("q00300.csv", header = T)
 
 
 names(dat) <- c("quad","spp","cov")
 head(dat)
+#dat$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
+#dat$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
+#dat <- filter(dat, ecosystem != '9')
 datmat <- dcast(dat, quad ~ spp, mean, value = "cov", fill = 0)
+datmat2 <- pivot_longer(data = dat,
+             cols = !quad,
+             names_to = "species",
+             values_to = "cover")
+
+prcomp(datmat)
+
 rownames(datmat) <- datmat[,1]
 datmat <- datmat[,-1]
 datmat[1:20,1:10]
@@ -87,7 +100,8 @@ A$Colecosystem<-env$iEcosystemID[A$Var2]
 A<-A[A$Rowyear=="Remnant",]  #only compare against remnant
 A<-A[A$Colyear!="Remnant",] #not remnant against remnant
 A<-A[A$Rowecosystem==A$Colecosystem,] #only same ecosystems
-#A<- A[A$Rowecosystem !=9,]
+A<- A[A$Rowecosystem !=9,]
+A<- A[A$Colecosystem !=9,]
 A<-na.omit(A)
 
 head(A)
