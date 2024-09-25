@@ -3,7 +3,7 @@ setwd("~/uomShare/wergProj/W12 - Revegetation/CLLMM work/Traits paper/Code and d
 
 library(extrafont)    # fonts for plotting (if using for first time need to load scripts - see help...)
 library(reshape2)     # longfile to flatfile and vice versa
-library(RODBC)        # import data from various ODBC datasources
+#library(RODBC)        # import data from various ODBC datasources
 library(FD)           # functional diversity indices
 library(vegan)        # community analyses
 library(lme4)         # multilevel modelling
@@ -35,29 +35,76 @@ head(dat)
 dat$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
 dat$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
 dat$WptID <- env$'iWptID'[match(dat$'quad', env$'iQuadratID')]
-dat <- filter(dat, ecosystem != '9')
-plants <- dat %>%
-  group_by(WptID, ecosystem, treat, spp) %>% 
-  summarise(cover=sum(cov))
+dat$year <- env$'iPlantYear'[match(dat$'quad', env$'iQuadratID')]
+dat2 <- filter(dat, ecosystem != '9')
 plants$WptID <- as.factor(plants$WptID)
 plants$treat <- as.factor(plants$treat)
 plants$ecosystem <- as.factor(plants$ecosystem)
-plants$cover <- as.numeric(plants$cover)
-str(plants)
-datmat <- dcast(dat, WptID+quad+treat+ecosystem ~ spp, mean, value = "cov", fill = 0)
+plants$quad <- as.factor(plants$quad)
+plants$year <- as.factor(plants$year)
+#plants$cov <- log(plants$cov)
+#plants$cov <- as.numeric(plants$cov)
+#plants_log <- mutate_if(plants$cov, is.numeric, log)
+datmat <- dcast(dat2, quad + WptID+treat+ecosystem+year ~ spp, mean, value.var="cov", fill = 0)
+
+names(datmat)[3] <- "ecosys"
+names_ecosystem <- datmat[,3:3]
+
+datmat2 <- datmat[,6:446]
+#datmat2 <- subset(datmat, select = -c(quad))
 str(datmat)
+
+# NMDS
+NMDS.count <- metaMDS(datmat2, distance = "bray", k = 2,trymax=100, autotransform = T)
+stressplot(NMDS.count)
+plot(NMDS.count)
+plot(NMDS.count$points)
+plot(NMDS.count, type = "n")
+orditorp(NMDS.count, display = "sites", labels = F, pch = 15, col = c("green", "blue", "red","black") [as.factor(names_ecosystem)], cex = 1)
+
+data.scores.gg.count = as.data.frame(scores(NMDS.count, "sites"))
+data.scores.gg.count$treat = data.group2.count$sites
+
+#ggplot Hulls
+grp.a.c <- data.scores.gg.count[data.scores.gg.count$treat == "1/7", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                    "1/7", c("NMDS1", "NMDS2")]), ]  
+grp.b.c <- data.scores.gg.count[data.scores.gg.count$treat == "7/7", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                    "7/7", c("NMDS1", "NMDS2")]), ]  
+grp.c.c <- data.scores.gg.count[data.scores.gg.count$treat == "1/14", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                     "1/14", c("NMDS1", "NMDS2")]), ]  
+grp.d.c <- data.scores.gg.count[data.scores.gg.count$treat == "7/14", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                     "7/14", c("NMDS1", "NMDS2")]), ]  
+grp.e.c <- data.scores.gg.count[data.scores.gg.count$treat == "1/21", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                     "1/21", c("NMDS1", "NMDS2")]), ]  
+grp.f.c <- data.scores.gg.count[data.scores.gg.count$treat == "7/21", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                     "7/21", c("NMDS1", "NMDS2")]), ]  
+grp.g.c <- data.scores.gg.count[data.scores.gg.count$treat == "Dry", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                    "Dry", c("NMDS1", "NMDS2")]), ]  
+grp.h.c <- data.scores.gg.count[data.scores.gg.count$treat == "Flood", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
+                                                                                                      "Flood", c("NMDS1", "NMDS2")]), ]  
+
+
+hull.data.count <- rbind(grp.a.c, grp.b.c, grp.c.c, grp.d.c, grp.e.c, grp.f.c, grp.g.c, grp.h.c)
+
+hull.data.count
+
+species.scores.count <- as.data.frame(scores(NMDS.count, "species"))  
+species.scores.count$species <- rownames(species.scores.count)  
+
+# Explore NMDS
+sig.species <- envfit(NMDS.count, all.sp2.count, permutations = 999)
+head(sig.species)
+species.scores.count <- cbind(species.scores.count, pval = sig.species$vectors$pvals)
+sig.spp.scrs <- subset(species.scores.count, pval<=0.05)
+head(sig.spp.scrs)
 
 pca_res <- prcomp(datmat, scale. = TRUE)
 autoplot(pca_res)
 autoplot(pca_res, data = datmat, colour = 'treat', frame = TRUE)
 
-data.pca <- princomp(datmat[,-1], cor=TRUE)
-summary(data.pca)
-round(data.pca$sdev^2,2)
-screeplot(data.pca)
-scale(datmat[,-1], center = data.pca$center, scale = data.pca$scale) %*% data.pca$loadings
-plot(data.pca$scores[,1],data.pca$scores[,2])
-text(data.pca$scores[,1],data.pca$scores[,2],datmat[,3])
+summary(pca_res)
+round(pca_res$sdev^2,2)
+screeplot(pca_res)
 
 rownames(datmat) <- datmat[,1]
 datmat <- datmat[,-1]
