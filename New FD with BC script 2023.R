@@ -1,5 +1,5 @@
 #setwd("C:/VP2015")
-setwd("~/uomShare/wergProj/W12 - Revegetation/CLLMM work/Traits paper/Code and data")
+setwd("C:/Users/sachamj/Downloads/CLLMM work/Traits paper/Code and data")
 
 library(extrafont)    # fonts for plotting (if using for first time need to load scripts - see help...)
 library(reshape2)     # longfile to flatfile and vice versa
@@ -32,38 +32,80 @@ env<- read.csv("q00300.csv", header = T)
 
 names(dat) <- c("quad","spp","cov")
 head(dat)
-dat$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
-dat$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
-dat$WptID <- env$'iWptID'[match(dat$'quad', env$'iQuadratID')]
-dat$year <- env$'iPlantYear'[match(dat$'quad', env$'iQuadratID')]
-dat2 <- filter(dat, ecosystem != '9')
-plants$WptID <- as.factor(plants$WptID)
-plants$treat <- as.factor(plants$treat)
-plants$ecosystem <- as.factor(plants$ecosystem)
-plants$quad <- as.factor(plants$quad)
-plants$year <- as.factor(plants$year)
+data <- dat
+data$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
+data$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
+data$WptID <- env$'iWptID'[match(dat$'quad', env$'iQuadratID')]
+data$year <- env$'iPlantYear'[match(dat$'quad', env$'iQuadratID')]
+data2 <- filter(data, ecosystem != '9')
+data3 <- data2 %>% group_by(WptID, year, treat, ecosystem, spp) %>% summarise(cover = sum(cov, na.rm = TRUE))
+#plants$WptID <- as.factor(plants$WptID)
+#plants$treat <- as.factor(plants$treat)
+#plants$ecosystem <- as.factor(plants$ecosystem)
+#plants$quad <- as.factor(plants$quad)
+#plants$year <- as.factor(plants$year)
 #plants$cov <- log(plants$cov)
 #plants$cov <- as.numeric(plants$cov)
 #plants_log <- mutate_if(plants$cov, is.numeric, log)
-datmat <- dcast(dat2, quad + WptID+treat+ecosystem+year ~ spp, mean, value.var="cov", fill = 0)
+datmat9 <- dcast(dat, quad ~ spp, mean, value.var="cov", fill = 0)
+datmat <- dcast(data2, quad+WptID+treat+ecosystem+year ~ spp, mean, value.var="cov", fill = 0)
+data_plants <- dcast(data3, WptID+treat+ecosystem+year ~ spp, mean, value.var="cover", fill = 0)
 
-names(datmat)[3] <- "ecosys"
+#names(datmat)[3] <- "treat"
 names_ecosystem <- datmat[,3:3]
 
+
+#datmat9 <- datmat9[6:467]
 datmat2 <- datmat[,6:446]
-#datmat2 <- subset(datmat, select = -c(quad))
-str(datmat)
+data_plants2 <- data_plants[,5:445]
+str(data_plants)
+
+#PCoA
+rs <- rowSums(datmat2)/sum(datmat2)
+d <- dist(decostand(datmat2, "chi"))
+ord <- wcmdscale(d, w = rs, eig = TRUE)
+ca <- cca(datmat2)
+
+pcoa <- cmdscale(d, eig = TRUE, add = TRUE)
+ordiplot (pcoa, display = 'sites', type = 'text')
+summary(pcoa)
+round(pcoa$sdev^2,2)
+#convert pcoa results into data frame that can be plotted
+pcoa_df <- data.frame(pcoa$points)
+colnames(pcoa_df) <- c("PCo1", "PCo2")
+pcoa_df$treat<- factor(datmat$treat) #add group of interest, mine was Morphospecies in the data frame cal_fem_data2
+pcoa_df$ecosystem<- factor(datmat$ecosystem)
+
+ggplot(pcoa_df, aes(x = PCo1, y = PCo2, color = ecosystem, linetype=treat, shape=treat)) + 
+  geom_point(size = 2) +
+  xlab("PCo1") +
+  ylab("PCo2") + 
+  ggtitle("Remnant & Revegetated Areas") +
+  theme_classic()
+
 
 # NMDS
-NMDS.count <- metaMDS(datmat2, distance = "bray", k = 2,trymax=100, autotransform = T)
+NMDS.count <- metaMDS(data_plants2, distance = "bray", k = 2,trymax=100, autotransform = T)
 stressplot(NMDS.count)
 plot(NMDS.count)
 plot(NMDS.count$points)
 plot(NMDS.count, type = "n")
 orditorp(NMDS.count, display = "sites", labels = F, pch = 15, col = c("green", "blue", "red","black") [as.factor(names_ecosystem)], cex = 1)
 
-data.scores.gg.count = as.data.frame(scores(NMDS.count, "sites"))
-data.scores.gg.count$treat = data.group2.count$sites
+NMDS_df <- data.frame(NMDS.count$points)
+colnames(NMDS_df) <- c("NMDS1", "NMDS2")
+NMDS_df$treat<- factor(data_plants$treat) #add group of interest - treatment and ecosystem
+NMDS_df$year<- factor(data_plants$year)
+
+ggplot(NMDS_df, aes(x = NMDS1, y = NMDS2, color = year, linetype=treat, shape=treat)) + 
+  geom_point(size = 2) +
+  xlab("NMDS1") +
+  ylab("NMDS2") + 
+  ggtitle("Remnant & Revegetated Areas") +
+  theme_classic()
+
+data.scores.gg.count = as.data.frame(vegan::scores(NMDS.count, "sites"))
+#data.scores.gg.count$treat = data.group2.count$sites
 
 #ggplot Hulls
 grp.a.c <- data.scores.gg.count[data.scores.gg.count$treat == "1/7", ][chull(data.scores.gg.count[data.scores.gg.count$treat == 
@@ -88,7 +130,7 @@ hull.data.count <- rbind(grp.a.c, grp.b.c, grp.c.c, grp.d.c, grp.e.c, grp.f.c, g
 
 hull.data.count
 
-species.scores.count <- as.data.frame(scores(NMDS.count, "species"))  
+species.scores.count <- as.data.frame(vegan::scores(NMDS.count, "species"))  
 species.scores.count$species <- rownames(species.scores.count)  
 
 # Explore NMDS
@@ -98,13 +140,9 @@ species.scores.count <- cbind(species.scores.count, pval = sig.species$vectors$p
 sig.spp.scrs <- subset(species.scores.count, pval<=0.05)
 head(sig.spp.scrs)
 
-pca_res <- prcomp(datmat, scale. = TRUE)
-autoplot(pca_res)
-autoplot(pca_res, data = datmat, colour = 'treat', frame = TRUE)
-
-summary(pca_res)
-round(pca_res$sdev^2,2)
-screeplot(pca_res)
+#pca_res <- prcomp(datmat2, scale. = TRUE)
+#autoplot(pca_res)
+#autoplot(pca_res, data = datmat2, colour = 'treat', frame = TRUE)
 
 rownames(datmat) <- datmat[,1]
 datmat <- datmat[,-1]
@@ -149,13 +187,14 @@ setdiff(levels(dat2.species), levels(dat.species))#
 ##datmat<-dplyr::mutate(datmat(x^1/4)) - trying to apply overall transformation!
 
 sim.method = 'bray'
-dat.dist <- vegdist(datmat, method=sim.method)
+dat.dist <- vegdist(datmat2, method=sim.method)
 head(dat.dist)
 
 Bcdist <- as.matrix(dat.dist)
 as.data.frame(Bcdist)
 head(Bcdist)
 A<-melt(Bcdist)
+env$iPlantYear<- as.character(env$iPlantYear)
 A$Rowyear<-env$iPlantYear[A$Var1]
 A$Colyear<-env$iPlantYear[A$Var2]
 #A$Rowyear<-env$Age[A$Var1]
@@ -165,8 +204,9 @@ A$RowSite<-env$iWptID[A$Var1]
 A$ColSite<-env$iWptID[A$Var2]
 A$Rowecosystem<-env$iEcosystemID[A$Var1] #datmat$iEcosystemID !=9
 A$Colecosystem<-env$iEcosystemID[A$Var2]
-A<-A[A$Rowyear=="Remnant",]  #only compare against remnant
-A<-A[A$Colyear!="Remnant",] #not remnant against remnant
+str(A$Rowyear)
+#A<-A[A$Rowyear=="Remnant",]  #only compare against remnant
+#A<-A[A$Colyear!="Remnant",] #not remnant against remnant
 A<-A[A$Rowecosystem==A$Colecosystem,] #only same ecosystems
 A<- A[A$Rowecosystem !=9,]
 A<- A[A$Colecosystem !=9,]
@@ -216,8 +256,9 @@ levels(A$Colecosystem)
 
 #################################### FD analyses######################################################################  
 
-dat.gowdis <- gowdis(datmat[-1,])
-dat.functcomp <- functcomp(dat2, as.matrix(datmat))
+datmat9 <- datmat9[,2:463]
+dat.gowdis <- gowdis(datmat9[-1,])
+dat.functcomp <- functcomp(dat2, as.matrix(datmat9))
 dat.dbFD <- dbFD(dat2
                  , as.matrix(datmat)
                  , print.pco = TRUE
