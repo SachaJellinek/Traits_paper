@@ -1,5 +1,5 @@
 #setwd("C:/VP2015")
-setwd("C:/Users/sachamj/Downloads/CLLMM work/Traits paper/Code and data")
+#setwd("C:/Users/sachamj/Downloads/CLLMM work/Traits paper/Code and data")
 
 library(extrafont)    # fonts for plotting (if using for first time need to load scripts - see help...)
 library(reshape2)     # longfile to flatfile and vice versa
@@ -24,21 +24,24 @@ library("FactoMineR")
 library(ggfortify)
 library(cluster)
 
-
-dat <- read.csv("q00200.csv", header = T)
-dat2<- read.csv("q00120.csv", header = T)
+setwd("~/uomShare/wergProj/W12 - Revegetation/CLLMM work/Traits paper/Code and data")
+sp_dat <- read.csv("q00200.csv", header = T)
+trait_dat<- read.csv("q00120.csv", header = T)
 env<- read.csv("q00300.csv", header = T)
 
-
-names(dat) <- c("quad","spp","cov")
-head(dat)
-data <- dat
-data$ecosystem <- env$'iEcosystemID'[match(dat$'quad', env$'iQuadratID')]
-data$treat <- env$'iTreatID'[match(dat$'quad', env$'iQuadratID')]
-data$WptID <- env$'iWptID'[match(dat$'quad', env$'iQuadratID')]
-data$year <- env$'iPlantYear'[match(dat$'quad', env$'iQuadratID')]
+head(sp_dat)
+data <- sp_dat
+names(data) <- c("quad","spp","cov")
+names(sp_dat) <- c("quad","Species","cov")
+data$ecosystem <- env$'iEcosystemID'[match(data1$'quad', env$'iQuadratID')]
+data$treat <- env$'iTreatID'[match(data1$'quad', env$'iQuadratID')]
+data$WptID <- env$'iWptID'[match(data1$'quad', env$'iQuadratID')]
+data$year <- env$'iPlantYear'[match(data1$'quad', env$'iQuadratID')]
 data2 <- filter(data, ecosystem != '9')
-data3 <- data2 %>% group_by(WptID, year, treat, ecosystem, spp) %>% summarise(cover = sum(cov, na.rm = TRUE))
+data_grp <- data2 %>% group_by(WptID, year, treat, ecosystem, spp) %>% summarise(cover = sum(cov, na.rm = TRUE))
+comm_comp <- trait_dat$'Species'[match(sp_dat$'spp', trait_dat$'Species')]
+sp_trait_dat <-  dplyr::left_join(x = sp_dat, y = trait_dat, by = "Species")
+
 #plants$WptID <- as.factor(plants$WptID)
 #plants$treat <- as.factor(plants$treat)
 #plants$ecosystem <- as.factor(plants$ecosystem)
@@ -47,57 +50,77 @@ data3 <- data2 %>% group_by(WptID, year, treat, ecosystem, spp) %>% summarise(co
 #plants$cov <- log(plants$cov)
 #plants$cov <- as.numeric(plants$cov)
 #plants_log <- mutate_if(plants$cov, is.numeric, log)
-datmat9 <- dcast(dat, quad ~ spp, mean, value.var="cov", fill = 0)
-datmat <- dcast(data2, quad+WptID+treat+ecosystem+year ~ spp, mean, value.var="cov", fill = 0)
-data_plants <- dcast(data3, WptID+treat+ecosystem+year ~ spp, mean, value.var="cover", fill = 0)
 
+datmat1 <- dcast(data2, quad ~ spp, mean, value.var="cov", fill = 0)
+#grouped by quadrat
+datmat_var <- dcast(data2, quad+WptID+treat+ecosystem+year ~ spp, mean, value.var="cov", fill = 0)
+#grouped by WptID not quadrat
+data_plants <- dcast(data_grp, WptID+treat+ecosystem+year ~ spp, mean, value.var="cover", fill = 0)
+# for fdis
+fdis_dat <- dcast(data, quad ~ spp, mean, value.var="cov", fill = 0)
+fdis_dat <- fdis_dat[,2:463]
 #names(datmat)[3] <- "treat"
-names_ecosystem <- datmat[,3:3]
-
+names_treat <- datmat_var[,3:3]
 
 #datmat9 <- datmat9[6:467]
-datmat2 <- datmat[,6:446]
+datmat_var2 <- datmat_var[,6:446]
 data_plants2 <- data_plants[,5:445]
 str(data_plants)
 
-#PCoA
-rs <- rowSums(datmat2)/sum(datmat2)
-d <- dist(decostand(datmat2, "chi"))
-ord <- wcmdscale(d, w = rs, eig = TRUE)
-ca <- cca(datmat2)
-
-pcoa <- cmdscale(d, eig = TRUE, add = TRUE)
-ordiplot (pcoa, display = 'sites', type = 'text')
-summary(pcoa)
-round(pcoa$sdev^2,2)
-#convert pcoa results into data frame that can be plotted
-pcoa_df <- data.frame(pcoa$points)
-colnames(pcoa_df) <- c("PCo1", "PCo2")
-pcoa_df$treat<- factor(datmat$treat) #add group of interest, mine was Morphospecies in the data frame cal_fem_data2
-pcoa_df$ecosystem<- factor(datmat$ecosystem)
-
-ggplot(pcoa_df, aes(x = PCo1, y = PCo2, color = ecosystem, linetype=treat, shape=treat)) + 
+#PCoA by quadrat
+bray_datmat <- vegan::vegdist(decostand(datmat_var2, "log"), method = "bray")
+bray_datmat_pcoa <- ecodist::pco(bray_datmat)
+bray_datmat_pcoa_df <- data.frame(pcoa1 = bray_datmat_pcoa$vectors[,1], 
+                                  pcoa2 = bray_datmat_pcoa$vectors[,2])
+colnames(bray_datmat_pcoa_df) <- c("PCOA1", "PCOA2")
+bray_datmat_pcoa_df$treat<- factor(datmat_var$treat) #add group of interest - treatment and ecosystem
+bray_datmat_pcoa_df$year<- factor(datmat_var$year)
+bray_datmat_pcoa_df$ecosystem<- factor(datmat_var$ecosystem)
+# Create a plot
+ggplot(bray_datmat_pcoa_df, aes(x = NMDS1, y = NMDS2, color = year, linetype=treat)) + 
   geom_point(size = 2) +
-  xlab("PCo1") +
-  ylab("PCo2") + 
+  xlab("PCOA1") +
+  ylab("PCOA2") + 
   ggtitle("Remnant & Revegetated Areas") +
   theme_classic()
 
+#PCoA by wpt
+bray_datmat_wpt <- vegan::vegdist(decostand(data_plants2, "log"), method = "bray")
+bray_datmat_pcoa_wpt <- pcoa(bray_datmat_wpt)
+bray_datmat_pcoa_wpt$values
+biplot(bray_datmat_pcoa_wpt, data_plants2)
+
+bray_datmat_pcoa_wptdf <- data.frame(pcoa1 = bray_datmat_pcoa_wpt$vectors[,1], 
+                                  pcoa2 = bray_datmat_pcoa_wpt$vectors[,2])
+colnames(bray_datmat_pcoa_wptdf) <- c("PCOA1", "PCOA2")
+bray_datmat_pcoa_wptdf$treat<- factor(data_plants$treat) #add group of interest - treatment and ecosystem
+bray_datmat_pcoa_wptdf$year<- factor(data_plants$year)
+bray_datmat_pcoa_wptdf$ecosystem<- factor(data_plants$ecosystem)
+
+# Create a plot
+ggplot(bray_datmat_pcoa_wptdf, aes(x = PCOA1, y = PCOA2, shape = year, linetype=treat)) + 
+  geom_point(size = 2) +
+  xlab("PCOA1") +
+  ylab("PCOA2") + 
+  ggtitle("Remnant & Revegetated Areas") +
+  theme_classic()
+autoplot(bray_datmat_pcoa_wpt)
 
 # NMDS
-NMDS.count <- metaMDS(data_plants2, distance = "bray", k = 2,trymax=100, autotransform = T)
+NMDS.count <- metaMDS(datmat_var2, distance = "bray", k = 2,trymax=100, autotransform = T)
 stressplot(NMDS.count)
 plot(NMDS.count)
 plot(NMDS.count$points)
 plot(NMDS.count, type = "n")
-orditorp(NMDS.count, display = "sites", labels = F, pch = 15, col = c("green", "blue", "red","black") [as.factor(names_ecosystem)], cex = 1)
+orditorp(NMDS.count, display = "sites", labels = F, pch = 15, col = c("green", "blue", "red","black") [as.factor(names_treat)], cex = 1)
 
 NMDS_df <- data.frame(NMDS.count$points)
-colnames(NMDS_df) <- c("NMDS1", "NMDS2")
-NMDS_df$treat<- factor(data_plants$treat) #add group of interest - treatment and ecosystem
-NMDS_df$year<- factor(data_plants$year)
+colnames(NMDS_df) <- c("PCOA1", "PCOA2")
+NMDS_df$treat<- factor(datmat_var$treat) #add group of interest - treatment and ecosystem
+NMDS_df$year<- factor(datmat_var$year)
+NMDS_df$ecosystem<- factor(datmat_var$ecosystem)
 
-ggplot(NMDS_df, aes(x = NMDS1, y = NMDS2, color = year, linetype=treat, shape=treat)) + 
+ggplot(NMDS_df, aes(x = NMDS1, y = NMDS2, color = year, linetype=treat, shape=ecosystem)) + 
   geom_point(size = 2) +
   xlab("NMDS1") +
   ylab("NMDS2") + 
@@ -256,11 +279,11 @@ levels(A$Colecosystem)
 
 #################################### FD analyses######################################################################  
 
-datmat9 <- datmat9[,2:463]
-dat.gowdis <- gowdis(datmat9[-1,])
-dat.functcomp <- functcomp(dat2, as.matrix(datmat9))
+#datmat1 <- datmat1[,2:442]
+dat.gowdis <- gowdis(fdis_dat[-1,])
+dat.functcomp <- functcomp(dat2, as.matrix(fdis_dat))
 dat.dbFD <- dbFD(dat2
-                 , as.matrix(datmat)
+                 , as.matrix(fdis_dat)
                  , print.pco = TRUE
                  , corr = "lingoes"
 )
@@ -369,3 +392,14 @@ AveFDis4<- merge(AveFDis3,SDFDIs)
 
 ggplot(AveFDis4, aes(x=iPlantYear,iEcosystemID, y=datFDis)) + geom_errorbar(ymin = AveFDis4$datFDis+AveFDis4$SDdatFDis,  ymax = AveFDis4$datFDis-AveFDis4$SDdatFDis)
 
+##################Community weighted means###########################
+#cllmm.cwm <-
+#  sp_trait_dat %>%
+#  group_by(quad) %>%
+#  summarize(Mat.1_cwm = weighted.mean(Mat.1, cov), 
+#            Mat1.5_cwm = weighted.mean(Mat1.5, cov),
+#            Mat5.20_cwm = weighted.mean(Mat5.20, cov))
+cllmm.cwm <-
+  sp_trait_dat %>% group_by(quad) %>% 
+  summarise_at(vars(c('Mat.1':'G3')), 
+               funs(weighted.mean(., cov)))
